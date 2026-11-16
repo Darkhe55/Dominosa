@@ -401,6 +401,11 @@ export class CustomEditor {
       return
     }
     if (this.editingName) puzzle.name = this.editingName
+    const check = this.adapter.custom.validatePuzzle?.(puzzle) ?? null
+    if (check && !check.ok) {
+      this.host.message(check.message || '题面不合法，无法载入。', 'bad')
+      return
+    }
     this.editingId = puzzle.id
     this.editingName = puzzle.name
     this.host.loadPuzzle(puzzle)
@@ -427,10 +432,19 @@ export class CustomEditor {
       return
     }
     puzzle.name = this.editingName ?? name
+    const check = this.adapter.custom.validatePuzzle?.(puzzle) ?? null
+    if (check && !check.ok) {
+      this.host.message(check.message || '题面不合法，未保存。', 'bad')
+      return
+    }
     this.host.savePuzzle(puzzle)
     this.editingId = puzzle.id
     this.editingName = puzzle.name
-    this.host.message(`已${isEditing ? '更新' : '保存'}到题库：「${puzzle.name}」，下次启动仍可选用。`, 'ok')
+    const suffix = check?.message ? ` ${check.message}` : ''
+    this.host.message(
+      `已${isEditing ? '更新' : '保存'}到题库：「${puzzle.name}」，下次启动仍可选用。${suffix}`,
+      'ok',
+    )
   }
 
   solve(): void {

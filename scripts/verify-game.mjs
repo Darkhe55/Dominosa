@@ -116,12 +116,26 @@ if (afterUndo.drawn !== 0) {
   console.error('FAIL: 撤销没有回到题面')
 }
 
-const customDisabled = await page.locator('#btn-custom').isDisabled()
-console.log('custom disabled:', customDisabled)
-if (!customDisabled) {
+const customEnabled = !(await page.locator('#btn-custom').isDisabled())
+console.log('custom enabled:', customEnabled)
+if (!customEnabled) {
   failures++
-  console.error('FAIL: 数邻 应关闭自定义题板')
+  console.error('FAIL: 数邻 应支持自定义题板（数字表）')
 }
+await page.click('#btn-custom')
+await page.waitForSelector('#custom-editor:not([hidden])')
+const customState = await page.evaluate(() => ({
+  cells: document.querySelectorAll('#custom-grid .custom-cell').length,
+  customMode: window.__game.adapter.custom.mode,
+  hint: window.__game.adapter.custom.hint,
+}))
+console.log('custom editor:', customState)
+if (customState.cells === 0 || customState.customMode !== 'cell') {
+  failures++
+  console.error('FAIL: 数邻 自定义题板没有正确挂载')
+}
+// 5×5（25 格）不是合法数邻格数：载入应被拒绝并给出提示
+await page.click('#custom-close')
 
 await page.screenshot({ path: 'output/playwright/05-verified.png', fullPage: true })
 console.log('pageErrors:', errors)

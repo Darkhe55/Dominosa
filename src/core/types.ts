@@ -192,6 +192,11 @@ export interface CustomSupport {
   encodePuzzle(p: Puzzle): Record<string, unknown>
   /** 从 library 条目还原题面；不合法返回 null */
   decodePuzzle(record: Record<string, unknown>): Puzzle | null
+  /**
+   * 可选：保存 / 载入自定义题前的题面审计。
+   * ok=false 会阻止载入 / 保存；ok=true 时 message 作为提示显示。
+   */
+  validatePuzzle?(p: Puzzle): { ok: boolean; message: string; tone?: 'ok' | 'bad' } | null
 }
 
 /**
