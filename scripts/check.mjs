@@ -50,6 +50,12 @@ for (const e of entries) {
     errors++
     continue
   }
+  if (typeof e.solution !== 'string' || e.solution.length === 0) {
+    // 识图导入的大题可能没有参考解：只做结构校验，不参与唯一解审计
+    console.warn(`[check] ${e.id} 没有参考解（识图导入），跳过唯一解校验`)
+    warnings++
+    continue
+  }
   const edges = buildEdges(digits, e.width, e.height)
   const values = decodeEdges(e.solution, edgeCount(e.width, e.height))
   if (!values) {

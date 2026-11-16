@@ -72,14 +72,46 @@ export function edgeCount(w: number, h: number): number {
   return h * (w - 1) + w * (h - 1)
 }
 
+const BASE36 = '0123456789abcdefghijklmnopqrstuvwxyz'
+
+/**
+ * 编码数字串：默认每格 1 个十进制字符（0–9，现有题库都是这种）。
+ * 当出现 >9 的数字（数邻的通用棋盘，如 0–40 的 42×41 大棋）时，
+ * 自动改成每格 2 个 base36 字符（支持到 1295），解码时按长度区分。
+ */
 export function encodeDigits(digits: ArrayLike<number>): string {
+  let max = 0
+  for (let i = 0; i < digits.length; i++) {
+    const v = digits[i]! | 0
+    if (v > max) max = v
+  }
+  if (max <= 9) {
+    let out = ''
+    for (let i = 0; i < digits.length; i++) out += String(digits[i]! | 0)
+    return out
+  }
   let out = ''
-  for (let i = 0; i < digits.length; i++) out += String(digits[i]! | 0)
+  for (let i = 0; i < digits.length; i++) {
+    const v = Math.max(0, digits[i]! | 0)
+    out += BASE36[Math.floor(v / BASE36.length)]! + BASE36[v % BASE36.length]!
+  }
   return out
 }
 
 export function decodeDigits(text: string, expected: number, maxDigit = 4): number[] | null {
-  if (typeof text !== 'string' || text.length !== expected) return null
+  if (typeof text !== 'string') return null
+  // 2 字符/格：数字可超过 9（不再受 maxDigit 限制）
+  if (expected > 0 && text.length === expected * 2) {
+    const out = new Array<number>(expected).fill(0)
+    for (let i = 0; i < expected; i++) {
+      const hi = BASE36.indexOf(text[i * 2]!.toLowerCase())
+      const lo = BASE36.indexOf(text[i * 2 + 1]!.toLowerCase())
+      if (hi < 0 || lo < 0) return null
+      out[i] = hi * BASE36.length + lo
+    }
+    return out
+  }
+  if (text.length !== expected) return null
   const out = new Array<number>(expected).fill(0)
   for (let i = 0; i < expected; i++) {
     const v = text.charCodeAt(i) - 48
