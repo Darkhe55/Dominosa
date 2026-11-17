@@ -51,7 +51,6 @@ export function planLogicSolve(puzzle: Puzzle, initialState: GameState): LogicPl
   let streak = 0
 
   const onSet = (index: number, value: number, reason: LogicReason, detail?: SetDetail): void => {
-    if (grid[index] === value) return
     const from = grid[index] === 1 ? 1 : 0
     grid[index] = value
     streak++
@@ -93,18 +92,6 @@ export function planLogicSolve(puzzle: Puzzle, initialState: GameState): LogicPl
   if (!checkSolution(values, edges, size, maxDigit).ok) {
     return { puzzleId: p.id, frames: [], finalState: null, ruleSteps: 0, saturated: false }
   }
-  for (let e = 0; e < total; e++) {
-    const from = s.edges[e] ?? 0
-    if (values[e] === from) continue
-    streak++
-    frames.push({
-      rule: 5,
-      label: '补全：该边最终状态',
-      move: { index: e, from, to: values[e]! },
-      streak,
-    })
-  }
-
   const finalState: DominosaState = {
     puzzleId: s.puzzleId,
     width: p.width,

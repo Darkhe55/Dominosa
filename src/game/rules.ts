@@ -51,8 +51,9 @@ export function propagate(
   const set = (e: number, value: number, reason: SetReason, detail?: SetDetail): boolean => {
     if (values[e] === value) return true
     if (values[e] !== -1) return false
-    values[e] = value
+    // 先回调（让回放读到旧值），再写入
     onSet?.(e, value, reason, detail)
+    values[e] = value
     changed = true
     return true
   }
