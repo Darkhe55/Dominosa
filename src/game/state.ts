@@ -6,10 +6,12 @@ import type { GameState, HitTarget, Move, Puzzle } from '../core/types'
 import {
   asDominosaPuzzle,
   asDominosaState,
+  buildEdges,
   decodeEdges,
   edgeCount,
   EDGE_SEPARATOR,
   encodeEdges,
+  incidentEdges,
   type DominosaState,
 } from './types'
 
@@ -45,14 +47,48 @@ export function rightClickValue(state: GameState, target: HitTarget): number {
   return v === 0 ? EDGE_SEPARATOR : 0
 }
 
+/** 放置数对前清除与它共用格子的旧数对，保证一个格子只属于一个多米诺。 */
+export function prepareMove(state: GameState, move: Move): Move {
+  if (move.to !== 1) return move
+  const s = asDominosaState(state)
+  const w = s.width
+  const h = s.height
+  const edges = buildEdges(new Array<number>(w * h).fill(0), w, h)
+  if (move.index < 0 || move.index >= edges.length) return move
+  const incident = incidentEdges(edges, w * h)
+  const target = edges[move.index]!
+  const conflicts = new Set<number>()
+  for (const cell of [target.a, target.b]) {
+    for (const e of incident[cell] ?? []) {
+      if (e !== move.index && s.edges[e] === 1) conflicts.add(e)
+    }
+  }
+  if (!conflicts.size) return move
+  return {
+    ...move,
+    extra: Array.from(conflicts, (index) => ({ index, from: 1, to: 0 })),
+  }
+}
+
+function edgeValue(v: number): number {
+  return v === 1 ? 1 : v === EDGE_SEPARATOR ? EDGE_SEPARATOR : 0
+}
+
 export function applyMove(state: GameState, move: Move): void {
   const s = asDominosaState(state)
-  if (move.index < 0 || move.index >= s.edges.length) return
-  s.edges[move.index] = move.to === 1 ? 1 : move.to === EDGE_SEPARATOR ? EDGE_SEPARATOR : 0
+  if (move.index >= 0 && move.index < s.edges.length) s.edges[move.index] = edgeValue(move.to)
+  for (const change of move.extra ?? []) {
+    if (change.index >= 0 && change.index < s.edges.length) s.edges[change.index] = edgeValue(change.to)
+  }
 }
 
 export function invertMove(move: Move): Move {
-  return { index: move.index, from: move.to, to: move.from }
+  return {
+    index: move.index,
+    from: move.to,
+    to: move.from,
+    extra: move.extra?.map((change) => ({ index: change.index, from: change.to, to: change.from })),
+  }
 }
 
 export function valueAt(state: GameState, index: number): number {

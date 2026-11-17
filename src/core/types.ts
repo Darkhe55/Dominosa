@@ -31,11 +31,19 @@ export interface GameState {
 }
 
 /** 一次落子：from/to 为数字枚举，0 = Unknown（所有游戏统一约定） */
+export interface MoveChange {
+  index: number
+  from: number
+  to: number
+}
+
 export interface Move {
   /** 目标索引：格子 / 边 / 顶点，由游戏定义 */
   index: number
   from: number
   to: number
+  /** 同一笔操作附带的其他索引变化（如清除重叠的数对），撤销时一起恢复 */
+  extra?: MoveChange[]
 }
 
 /** 校验结果：游戏扩展错误明细，至少给出 solved */
@@ -222,6 +230,8 @@ export interface GameAdapter {
   strokeMode?: 'cycle' | 'transition'
   /** 右键是否支持起笔拖动 */
   rightStroke?: boolean
+  /** 应用前规范化（可选）：例如数邻放数对时清除重叠的旧数对 */
+  prepareMove?(state: GameState, move: Move): Move
   applyMove(state: GameState, move: Move): void
   invertMove(move: Move): Move
   /** 读取某索引当前值（state 内部数组的取值入口） */

@@ -329,8 +329,9 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
 
   function pushMove(move: Move): void {
     if (!session) return
-    adapter.applyMove(session.state, move)
-    session.undo.push(move)
+    const prepared = adapter.prepareMove ? adapter.prepareMove(session.state, move) : move
+    adapter.applyMove(session.state, prepared)
+    session.undo.push(prepared)
     session.redo.length = 0
     saveState()
   }
@@ -339,23 +340,29 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
 
   function bindBoardEvents(): void {
     const board = $('#board')
-    const svg = board.querySelector<SVGSVGElement>('svg.board-svg')
-    if (!svg) return
+    const initialSvg = board.querySelector<SVGSVGElement>('svg.board-svg')
+    if (!initialSvg) return
 
-    view.apply(svg)
+    view.apply(initialSvg)
 
-    svg.addEventListener('contextmenu', (e) => {
-      e.preventDefault()
-    })
+    // 事件只绑定一次到持久存在的 #board 上；refresh() 会替换内部 SVG。
+    if (board.dataset.interactionBound === '1') return
+    board.dataset.interactionBound = '1'
+    board.addEventListener('contextmenu', (e) => e.preventDefault())
 
     let mode: 'idle' | 'drag' | 'pan' = 'idle'
     let dragMoved = false
     let lastClient = { x: 0, y: 0 }
     let painting: { from: number; to: number } | null = null
     let painted = new Set<number>()
+    let cleanupGesture: (() => void) | null = null
+
+    const currentSvg = (): SVGSVGElement | null => board.querySelector<SVGSVGElement>('svg.board-svg')
 
     const hitAt = (e: PointerEvent) => {
       if (!session) return null
+      const svg = currentSvg()
+      if (!svg) return null
       const vb = clientToViewBox(svg, e.clientX, e.clientY)
       if (!vb) return null
       const m = adapter.metricsFor(session.puzzle)
@@ -379,11 +386,15 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
       refresh()
     }
 
-    svg.addEventListener(
+    board.addEventListener(
       'wheel',
       (e) => {
+        const target = e.target as Element | null
+        if (!target?.closest('svg.board-svg')) return
         e.preventDefault()
         e.stopPropagation()
+        const svg = currentSvg()
+        if (!svg) return
         const vb = clientToViewBox(svg, e.clientX, e.clientY)
         const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
         view.setZoom(view.zoom * factor, vb ?? undefined)
@@ -391,91 +402,100 @@ export function createApp(root: HTMLElement, adapter: GameAdapter) {
       { passive: false },
     )
 
-    svg.addEventListener('pointerdown', (e) => {
+    board.addEventListener('pointerdown', (e) => {
+      const target = e.target as Element | null
+      if (!target?.closest('svg.board-svg')) return
+      if (mode !== 'idle') return
       resumeAudio()
+
       if (e.button === 1) {
-        // 中键拖动平移（缩放后也适用）
         e.preventDefault()
         mode = 'pan'
         lastClient = { x: e.clientX, y: e.clientY }
-        svg.setPointerCapture(e.pointerId)
-        return
-      }
-      if (!session) return
-
-      if (e.button === 2 && !adapter.rightStroke) {
-        const hit = hitAt(e)
-        if (!hit) return
-        const from = adapter.valueAt(session.state, hit.index)
-        const to = adapter.rightClickValue(session.state, hit)
-        if (from !== to) {
-          pushMove({ index: hit.index, from, to })
-          refresh()
+      } else {
+        if (!session) return
+        if (e.button === 2) e.preventDefault()
+        if (e.button === 2 && !adapter.rightStroke) {
+          const hit = hitAt(e)
+          if (!hit) return
+          const from = adapter.valueAt(session.state, hit.index)
+          const to = adapter.rightClickValue(session.state, hit)
+          if (from !== to) {
+            pushMove({ index: hit.index, from, to })
+            refresh()
+          }
+          return
         }
-        return
+        if (e.button !== 0 && e.button !== 2) return
+
+        const hit = hitAt(e)
+        mode = 'drag'
+        dragMoved = false
+        painted = new Set()
+        painting = null
+        lastClient = { x: e.clientX, y: e.clientY }
+        if (!hit) {
+          // 从空白处左键拖动平移
+        } else {
+          const from = adapter.valueAt(session.state, hit.index)
+          const to =
+            e.button === 2
+              ? adapter.rightClickValue(session.state, hit)
+              : adapter.cycleValue(session.state, hit)
+          if (from !== to) {
+            painting = { from, to }
+            painted.add(hit.index)
+            applyAt(hit, true)
+          }
+        }
       }
-      if (e.button !== 0 && e.button !== 2) return
 
-      const hit = hitAt(e)
-      mode = 'drag'
-      dragMoved = false
-      painted = new Set()
-      painting = null
-      lastClient = { x: e.clientX, y: e.clientY }
-      svg.setPointerCapture(e.pointerId)
-      if (!hit) return
-
-      const from = adapter.valueAt(session.state, hit.index)
-      const to =
-        e.button === 2
-          ? adapter.rightClickValue(session.state, hit)
-          : adapter.cycleValue(session.state, hit)
-      if (from === to) return
-      painting = { from, to }
-      painted.add(hit.index)
-      applyAt(hit, true)
-    })
-
-    svg.addEventListener('pointermove', (e) => {
-      if (mode === 'pan') {
-        const dx = e.clientX - lastClient.x
-        const dy = e.clientY - lastClient.y
+      const onMove = (ev: PointerEvent) => {
+        if (mode === 'pan') {
+          const svg = currentSvg()
+          if (!svg) return
+          const dx = ev.clientX - lastClient.x
+          const dy = ev.clientY - lastClient.y
+          const rect = svg.getBoundingClientRect()
+          view.panBy(dx, dy, svg, rect.width, rect.height)
+          lastClient = { x: ev.clientX, y: ev.clientY }
+          return
+        }
+        if (mode !== 'drag') return
+        const dx = ev.clientX - lastClient.x
+        const dy = ev.clientY - lastClient.y
+        if (!dragMoved && Math.hypot(dx, dy) < 6) return
+        dragMoved = true
+        if (painting) {
+          const hit = hitAt(ev)
+          if (hit && !painted.has(hit.index)) {
+            painted.add(hit.index)
+            applyAt(hit, false)
+          }
+          return
+        }
+        const svg = currentSvg()
+        if (!svg) return
         const rect = svg.getBoundingClientRect()
         view.panBy(dx, dy, svg, rect.width, rect.height)
-        lastClient = { x: e.clientX, y: e.clientY }
-        return
+        lastClient = { x: ev.clientX, y: ev.clientY }
       }
-      if (mode !== 'drag') return
-      const dx = e.clientX - lastClient.x
-      const dy = e.clientY - lastClient.y
-      if (!dragMoved && Math.hypot(dx, dy) < 6) return
-      dragMoved = true
-      if (painting) {
-        const hit = hitAt(e)
-        if (hit && !painted.has(hit.index)) {
-          painted.add(hit.index)
-          applyAt(hit, false)
-        }
-        return
-      }
-      // 从空白处左键拖动平移（保留原交互）
-      const rect = svg.getBoundingClientRect()
-      view.panBy(dx, dy, svg, rect.width, rect.height)
-      lastClient = { x: e.clientX, y: e.clientY }
-    })
 
-    const endDrag = (e: PointerEvent) => {
-      if (mode === 'idle') return
-      mode = 'idle'
-      painting = null
-      try {
-        svg.releasePointerCapture(e.pointerId)
-      } catch {
-        /* ignore */
+      const onUp = () => {
+        cleanupGesture?.()
       }
-    }
-    svg.addEventListener('pointerup', endDrag)
-    svg.addEventListener('pointercancel', endDrag)
+      cleanupGesture = () => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', onUp)
+        cleanupGesture = null
+        mode = 'idle'
+        painting = null
+      }
+      window.addEventListener('pointermove', onMove, { passive: false })
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', onUp)
+    })
   }
 
   /* ———————————————————— 撤销 / 重做 / 清空 ———————————————————— */

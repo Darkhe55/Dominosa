@@ -9,6 +9,7 @@ import {
   asDominosaPuzzle,
   asDominosaState,
   buildEdges,
+  EDGE_SEPARATOR,
   type DominosaState,
 } from './types'
 
@@ -48,13 +49,19 @@ export function planLogicSolve(puzzle: Puzzle, initialState: GameState): LogicPl
   const total = edges.length
   const frames: PlaybackFrame[] = []
   const grid = new Array<number>(total).fill(-1)
+  // 从当前盘面开始：已选数对 = 1，隔板 = 已知排除 0；其余未知。
+  for (let e = 0; e < total; e++) {
+    if (s.edges[e] === 1) grid[e] = 1
+    else if (s.edges[e] === EDGE_SEPARATOR) grid[e] = 0
+  }
   let streak = 0
 
   const onSet = (index: number, value: number, reason: LogicReason, detail?: SetDetail): void => {
-    const from = grid[index] === 1 ? 1 : 0
+    const from = grid[index] === 1 ? 1 : grid[index] === 0 ? EDGE_SEPARATOR : 0
     grid[index] = value
     streak++
-    const move: Move = { index, from, to: value }
+    // 非数对（排除）在回放中也要显示成隔板，而不是无动画的空边
+    const move: Move = { index, from, to: value === 1 ? 1 : EDGE_SEPARATOR }
     frames.push({
       rule: ruleFor(value, reason),
       label: labelFor(value, reason, detail),
@@ -96,7 +103,8 @@ export function planLogicSolve(puzzle: Puzzle, initialState: GameState): LogicPl
     puzzleId: s.puzzleId,
     width: p.width,
     height: p.height,
-    edges: values,
+    // 逻辑推导出的非数对保留为隔板，避免回放结束后标记消失
+    edges: grid.map((v) => (v === 1 ? 1 : v === 0 ? 2 : 0)),
   }
   return { puzzleId: p.id, frames, finalState, ruleSteps: frames.length, saturated }
 }
