@@ -8,6 +8,7 @@ import {
   asDominosaState,
   decodeEdges,
   edgeCount,
+  EDGE_SEPARATOR,
   encodeEdges,
   type DominosaState,
 } from './types'
@@ -33,18 +34,21 @@ export function cloneState(state: GameState): DominosaState {
 }
 
 export function cycleValue(state: GameState, target: HitTarget): number {
-  const s = asDominosaState(state)
-  return (s.edges[target.index] ?? 0) ? 0 : 1
+  const v = asDominosaState(state).edges[target.index] ?? 0
+  // 左键：空 → 数对；数对 → 空；隔板 → 空
+  return v === 0 ? 1 : 0
 }
 
-export function rightClickValue(): number {
-  return 0
+export function rightClickValue(state: GameState, target: HitTarget): number {
+  const v = asDominosaState(state).edges[target.index] ?? 0
+  // 右键：空 → 隔板；数对/隔板 → 空
+  return v === 0 ? EDGE_SEPARATOR : 0
 }
 
 export function applyMove(state: GameState, move: Move): void {
   const s = asDominosaState(state)
   if (move.index < 0 || move.index >= s.edges.length) return
-  s.edges[move.index] = move.to ? 1 : 0
+  s.edges[move.index] = move.to === 1 ? 1 : move.to === EDGE_SEPARATOR ? EDGE_SEPARATOR : 0
 }
 
 export function invertMove(move: Move): Move {

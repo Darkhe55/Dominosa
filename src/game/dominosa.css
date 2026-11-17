@@ -34,3 +34,10 @@
   stroke-width: 3;
   pointer-events: none;
 }
+
+.board-svg .dm-separator {
+  stroke: #a4553a;
+  stroke-width: 4;
+  stroke-linecap: round;
+  pointer-events: none;
+}

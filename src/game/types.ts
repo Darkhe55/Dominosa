@@ -2,7 +2,7 @@
  * 数邻（Dominosa）—— 类型
  *
  * digits[i]：0..4 的数字。
- * edges[e]：相邻格之间的边，1 表示连成多米诺。
+ * edges[e]：相邻格之间的边，0 = 未标记，1 = 连成多米诺，2 = 隔板。
  */
 
 import type { GameState, Puzzle, ValidationResult } from '../core/types'
@@ -121,9 +121,14 @@ export function decodeDigits(text: string, expected: number, maxDigit = 4): numb
   return out
 }
 
+export const EDGE_SEPARATOR = 2
+
 export function encodeEdges(edges: ArrayLike<number>): string {
   let out = ''
-  for (let i = 0; i < edges.length; i++) out += edges[i] ? '1' : '0'
+  for (let i = 0; i < edges.length; i++) {
+    const v = edges[i]! | 0
+    out += v === 1 ? '1' : v === EDGE_SEPARATOR ? '2' : '0'
+  }
   return out
 }
 
@@ -132,6 +137,7 @@ export function decodeEdges(text: string, expected: number): number[] | null {
   const out = new Array<number>(expected).fill(0)
   for (let i = 0; i < expected; i++) {
     if (text[i] === '1') out[i] = 1
+    else if (text[i] === '2') out[i] = EDGE_SEPARATOR
     else if (text[i] === '0') out[i] = 0
     else return null
   }

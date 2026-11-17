@@ -45,7 +45,8 @@ const meta = {
   customMaxW: 22,
   customMaxH: 22,
   targetKind: 'edge' as const,
-  interactionHint: '点击相邻两格之间的边切换多米诺；右键取消。',
+  interactionHint:
+    '左键点击/拖动选数对或移除隔板；右键点击/拖动加隔板或移除数对；中键拖动平移；滚轮缩放。',
 }
 
 /* ────────────────────────── 自定义题板 ────────────────────────── */
@@ -192,4 +193,6 @@ export const adapter: GameAdapter = {
   firstHintMove,
   custom,
   playForMove,
+  strokeMode: 'transition',
+  rightStroke: true,
 }
